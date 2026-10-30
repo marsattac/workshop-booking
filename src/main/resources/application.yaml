@@ -1,0 +1,6 @@
+spring:
+  application:
+    name: workshop-booking
+  threads:
+    virtual:
+      enabled: true
