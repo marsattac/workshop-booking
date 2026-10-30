@@ -13,7 +13,8 @@ Agent failed at :
 
 ## Experiment: ScopedValue with an executor instead of StructuredTaskScope
 
-`ReservationService.reserve()` binds `REQUEST_ID` with a `ScopedValue`, then loads the user and the workshop in parallel.
+The caller of `ReservationService.reserve()` binds `REQUEST_ID` with a `ScopedValue`, and `reserve()` loads the user and the workshop in parallel.
+At the time of the experiment, `reserve()` created the binding itself, which is why the stack trace below mentions `doReserve`.
 For this experiment, `StructuredTaskScope` was temporarily replaced with `Executors.newVirtualThreadPerTaskExecutor()`, and `propagatesRequestIdToParallelReads` was run unchanged.
 
 The test fails on the first read:

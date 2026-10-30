@@ -117,7 +117,7 @@ class ReservationServiceTest {
     }
 
     @Test
-    @DisplayName("le REQUEST_ID est propagé aux deux lectures et change à chaque requête")
+    @DisplayName("le REQUEST_ID lié par l'appelant est propagé aux deux lectures")
     void propagatesRequestIdToParallelReads() throws InterruptedException {
         var requestIds = new CopyOnWriteArrayList<String>();
         Latency recordRequestId = () -> requestIds.add(RequestContext.REQUEST_ID.get());
@@ -127,10 +127,9 @@ class ReservationServiceTest {
         spiedWorkshops.save(new Workshop("w1", "Java 25", 3));
         var spiedService = new ReservationService(spiedUsers, spiedWorkshops, reservations, published::add);
 
-        spiedService.reserve("u1", "w1");
-        spiedService.reserve("u1", "w1");
+        ScopedValue.where(RequestContext.REQUEST_ID, "req-42").call(() -> spiedService.reserve("u1", "w1"));
 
-        assertEquals(List.of("req-1", "req-1", "req-2", "req-2"), requestIds);
+        assertEquals(List.of("req-42", "req-42"), requestIds);
     }
 
     @Test

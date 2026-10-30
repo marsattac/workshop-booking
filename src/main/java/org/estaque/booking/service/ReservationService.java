@@ -1,6 +1,5 @@
 package org.estaque.booking.service;
 
-import org.estaque.booking.context.RequestContext;
 import org.estaque.booking.event.ReservationEvents;
 import org.estaque.booking.model.User;
 import org.estaque.booking.model.Workshop;
@@ -15,7 +14,6 @@ import org.estaque.booking.service.result.ReservationResult;
 import java.util.Optional;
 import java.util.concurrent.StructuredTaskScope;
 import java.util.concurrent.StructuredTaskScope.Subtask;
-import java.util.concurrent.atomic.AtomicLong;
 
 public final class ReservationService {
 
@@ -23,7 +21,6 @@ public final class ReservationService {
     private final WorkshopRepository workshops;
     private final ReservationRepository reservations;
     private final ReservationEvents events;
-    private final AtomicLong requestSequence = new AtomicLong();
 
     public ReservationService(UserRepository users,
                               WorkshopRepository workshops,
@@ -36,12 +33,6 @@ public final class ReservationService {
     }
 
     public ReservationResult reserve(String userId, String workshopId) throws InterruptedException {
-        var requestId = "req-" + requestSequence.incrementAndGet();
-        return ScopedValue.where(RequestContext.REQUEST_ID, requestId)
-                .call(() -> doReserve(userId, workshopId));
-    }
-
-    private ReservationResult doReserve(String userId, String workshopId) throws InterruptedException {
         Subtask<Optional<User>> user;
         Subtask<Optional<Workshop>> workshop;
         // Les deux lectures partent en parallèle, chacune sur son virtual thread ;
