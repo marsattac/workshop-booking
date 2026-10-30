@@ -17,8 +17,11 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -37,7 +40,7 @@ class ReservationServiceTest {
         var latency = Latency.of(DB_LATENCY);
         users = new UserRepository(latency);
         workshops = new WorkshopRepository(latency);
-        reservations = new ReservationRepository(Latency.NONE);
+        reservations = new ReservationRepository(latency);
         service = new ReservationService(users, workshops, reservations, published::add);
 
         users.save(new User("u1", "Alice"));
@@ -90,8 +93,8 @@ class ReservationServiceTest {
         service.reserve("u1", "w1");
         var elapsed = Duration.ofNanos(System.nanoTime() - start);
 
-        // En séquentiel on attendrait au moins 2 x 200 ms.
-        assertTrue(elapsed.compareTo(DB_LATENCY.multipliedBy(2)) < 0,
+        // En séquentiel on attendrait au moins 3 x 200 ms (2 lectures de user et de workshop et 1 insertion de la réservation).
+        assertTrue(elapsed.compareTo(DB_LATENCY.multipliedBy(3)) < 0,
                 () -> "chargement non parallèle : " + elapsed.toMillis() + " ms");
     }
 
@@ -110,6 +113,54 @@ class ReservationServiceTest {
         assertEquals(2, threads.size());
         assertTrue(threads.stream().allMatch(Thread::isVirtual));
         assertNotEquals(threads.get(0), threads.get(1));
+    }
+
+    @Test
+    @DisplayName("1000 réservations simultanées : mesure du temps total")
+    void handlesThousandConcurrentReservations() throws Exception {
+        int count = 1000;
+        workshops.save(new Workshop("w-big", "Grand amphi", 1));
+
+        long start = System.nanoTime();
+        List<Future<ReservationResult>> results = new ArrayList<>();
+        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            for (int i = 0; i < count; i++) {
+                results.add(executor.submit(() -> service.reserve("u1", "w-big")));
+            }
+        }
+        var elapsed = Duration.ofNanos(System.nanoTime() - start);
+        System.out.printf("%d réservations simultanées en %d ms%n", count, elapsed.toMillis());
+
+        for (var result : results) {
+            assertInstanceOf(Confirmed.class, result.get());
+        }
+        assertEquals(count, reservations.findAll().size());
+        assertEquals(count, published.size());
+        // En séquentiel, il faudrait au moins count x DB_LATENCY.
+        var sequential = DB_LATENCY.multipliedBy(count);
+        assertTrue(elapsed.compareTo(sequential.dividedBy(10)) < 0,
+                () -> "trop lent : " + elapsed.toMillis() + " ms (séquentiel : " + sequential.toMillis() + " ms)");
+    }
+
+    @Test
+    @DisplayName("dernière place : sur deux réservations simultanées, une seule est confirmée")
+    void confirmsOnlyOneReservationForLastSeat() throws Exception {
+        users.save(new User("u2", "Bob"));
+        workshops.save(new Workshop("w-last", "Dernière place", 1));
+
+        Future<ReservationResult> first;
+        Future<ReservationResult> second;
+        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            first = executor.submit(() -> service.reserve("u1", "w-last"));
+            second = executor.submit(() -> service.reserve("u2", "w-last"));
+        }
+
+        var results = List.of(first.get(), second.get());
+        assertEquals(1, results.stream().filter(Confirmed.class::isInstance).count(),
+                () -> "une seule réservation doit être confirmée : " + results);
+        assertTrue(results.contains(new Rejected(Reason.FULL)), () -> "l'autre doit être refusée (FULL) : " + results);
+        assertEquals(1, reservations.findAll().size());
+        assertEquals(1, published.size());
     }
 
     private void assertRejected(Reason expected, ReservationResult result) {
