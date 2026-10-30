@@ -1,5 +1,6 @@
 package org.estaque.booking.service;
 
+import org.estaque.booking.context.RequestContext;
 import org.estaque.booking.event.ReservationEvents;
 import org.estaque.booking.model.User;
 import org.estaque.booking.model.Workshop;
@@ -12,9 +13,9 @@ import org.estaque.booking.service.result.Rejected;
 import org.estaque.booking.service.result.ReservationResult;
 
 import java.util.Optional;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
+import java.util.concurrent.StructuredTaskScope;
+import java.util.concurrent.StructuredTaskScope.Subtask;
+import java.util.concurrent.atomic.AtomicLong;
 
 public final class ReservationService {
 
@@ -22,6 +23,7 @@ public final class ReservationService {
     private final WorkshopRepository workshops;
     private final ReservationRepository reservations;
     private final ReservationEvents events;
+    private final AtomicLong requestSequence = new AtomicLong();
 
     public ReservationService(UserRepository users,
                               WorkshopRepository workshops,
@@ -34,19 +36,33 @@ public final class ReservationService {
     }
 
     public ReservationResult reserve(String userId, String workshopId) throws InterruptedException {
-        Future<Optional<User>> user;
-        Future<Optional<Workshop>> workshop;
+        var requestId = "req-" + requestSequence.incrementAndGet();
+        return ScopedValue.where(RequestContext.REQUEST_ID, requestId)
+                .call(() -> doReserve(userId, workshopId));
+    }
+
+    private ReservationResult doReserve(String userId, String workshopId) throws InterruptedException {
+        Subtask<Optional<User>> user;
+        Subtask<Optional<Workshop>> workshop;
         // Les deux lectures partent en parallèle, chacune sur son virtual thread ;
-        // la fermeture de l'executor attend la fin des deux.
-        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
-            user = executor.submit(() -> users.findById(userId));
-            workshop = executor.submit(() -> workshops.findById(workshopId));
+        // join() attend la fin des deux et, si l'une échoue, annule l'autre.
+        try (var scope = StructuredTaskScope.open()) {
+            user = scope.fork(() -> users.findById(userId));
+            workshop = scope.fork(() -> workshops.findById(workshopId));
+            scope.join();
+        } catch (StructuredTaskScope.FailedException e) {
+            switch (e.getCause()) {
+                case RuntimeException re -> throw re;
+                case Error err -> throw err;
+                case InterruptedException ie -> throw ie;
+                case Throwable t -> throw new IllegalStateException(t);
+            }
         }
 
-        if (await(user).isEmpty()) {
+        if (user.get().isEmpty()) {
             return new Rejected(Reason.USER_NOT_FOUND);
         }
-        var foundWorkshop = await(workshop);
+        var foundWorkshop = workshop.get();
         if (foundWorkshop.isEmpty()) {
             return new Rejected(Reason.WORKSHOP_NOT_FOUND);
         }
@@ -57,18 +73,5 @@ public final class ReservationService {
         var reservation = reservations.insert(userId, workshopId);
         events.created(reservation);
         return new Confirmed(reservation);
-    }
-
-    private static <T> T await(Future<T> future) throws InterruptedException {
-        try {
-            return future.get();
-        } catch (ExecutionException e) {
-            switch (e.getCause()) {
-                case RuntimeException re -> throw re;
-                case Error err -> throw err;
-                case InterruptedException ie -> throw ie;
-                case Throwable t -> throw new IllegalStateException(t);
-            }
-        }
     }
 }

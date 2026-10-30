@@ -1,5 +1,6 @@
 package org.estaque.booking.service;
 
+import org.estaque.booking.context.RequestContext;
 import org.estaque.booking.model.Reservation;
 import org.estaque.booking.model.User;
 import org.estaque.booking.model.Workshop;
@@ -113,6 +114,23 @@ class ReservationServiceTest {
         assertEquals(2, threads.size());
         assertTrue(threads.stream().allMatch(Thread::isVirtual));
         assertNotEquals(threads.get(0), threads.get(1));
+    }
+
+    @Test
+    @DisplayName("le REQUEST_ID est propagé aux deux lectures et change à chaque requête")
+    void propagatesRequestIdToParallelReads() throws InterruptedException {
+        var requestIds = new CopyOnWriteArrayList<String>();
+        Latency recordRequestId = () -> requestIds.add(RequestContext.REQUEST_ID.get());
+        var spiedUsers = new UserRepository(recordRequestId);
+        var spiedWorkshops = new WorkshopRepository(recordRequestId);
+        spiedUsers.save(new User("u1", "Alice"));
+        spiedWorkshops.save(new Workshop("w1", "Java 25", 3));
+        var spiedService = new ReservationService(spiedUsers, spiedWorkshops, reservations, published::add);
+
+        spiedService.reserve("u1", "w1");
+        spiedService.reserve("u1", "w1");
+
+        assertEquals(List.of("req-1", "req-1", "req-2", "req-2"), requestIds);
     }
 
     @Test

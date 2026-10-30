@@ -1,5 +1,6 @@
 package org.estaque.booking.repository;
 
+import org.estaque.booking.context.RequestContext;
 import org.estaque.booking.model.Workshop;
 
 import java.util.Map;
@@ -20,6 +21,7 @@ public final class WorkshopRepository {
     }
 
     public Optional<Workshop> findById(String id) throws InterruptedException {
+        RequestContext.log("findById " + id);
         latency.simulate();
         return Optional.ofNullable(workshops.get(id));
     }
