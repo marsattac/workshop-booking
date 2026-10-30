@@ -116,10 +116,11 @@ class ReservationServiceTest {
     }
 
     @Test
-    @DisplayName("1000 réservations simultanées : mesure du temps total")
+    @DisplayName("1000 réservations simultanées pour 100 places : 100 confirmées, 900 refusées (FULL)")
     void handlesThousandConcurrentReservations() throws Exception {
         int count = 1000;
-        workshops.save(new Workshop("w-big", "Grand amphi", 1));
+        int seats = 100;
+        workshops.save(new Workshop("w-big", "Grand amphi", seats));
 
         long start = System.nanoTime();
         List<Future<ReservationResult>> results = new ArrayList<>();
@@ -131,15 +132,25 @@ class ReservationServiceTest {
         var elapsed = Duration.ofNanos(System.nanoTime() - start);
         System.out.printf("%d réservations simultanées en %d ms%n", count, elapsed.toMillis());
 
+        int confirmed = 0;
+        int full = 0;
         for (var result : results) {
-            assertInstanceOf(Confirmed.class, result.get());
+            switch (result.get()) {
+                case Confirmed _ -> confirmed++;
+                case Rejected(var reason) when reason == Reason.FULL -> full++;
+                case Rejected rejected -> fail("refus inattendu : " + rejected);
+            }
         }
-        assertEquals(count, reservations.findAll().size());
-        assertEquals(count, published.size());
-        // En séquentiel, il faudrait au moins count x DB_LATENCY.
-        var sequential = DB_LATENCY.multipliedBy(count);
-        assertTrue(elapsed.compareTo(sequential.dividedBy(10)) < 0,
-                () -> "trop lent : " + elapsed.toMillis() + " ms (séquentiel : " + sequential.toMillis() + " ms)");
+        assertEquals(seats, confirmed, "réservations confirmées");
+        assertEquals(count - seats, full, "réservations refusées (FULL)");
+        assertEquals(seats, reservations.findAll().size());
+        assertEquals(seats, published.size());
+        // Toutes les réservations se chevauchent : le temps total reste proche de celui d'une seule
+        // réservation confirmée, soit 2 x DB_LATENCY (lectures parallèles, puis insertion).
+        var singleReservation = DB_LATENCY.multipliedBy(2);
+        var limit = singleReservation.multipliedBy(2);
+        assertTrue(elapsed.compareTo(limit) < 0,
+                () -> "trop lent : " + elapsed.toMillis() + " ms (limite : " + limit.toMillis() + " ms)");
     }
 
     @Test
