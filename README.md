@@ -9,4 +9,4 @@ Agent succeeded in :
 Agent failed at :
 - organising the produced code into a readable package tree
 - detecting or notifying about the lack of decrement about the number of remaining seats
-- making tests robust adn fully representative of production issues
+- making tests robust and fully representative of production issues
