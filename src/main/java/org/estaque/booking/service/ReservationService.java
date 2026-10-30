@@ -13,7 +13,6 @@ import org.estaque.booking.service.result.ReservationResult;
 
 import java.util.Optional;
 import java.util.concurrent.StructuredTaskScope;
-import java.util.concurrent.StructuredTaskScope.Subtask;
 
 public final class ReservationService {
 
@@ -21,6 +20,8 @@ public final class ReservationService {
     private final WorkshopRepository workshops;
     private final ReservationRepository reservations;
     private final ReservationEvents events;
+
+    private record Loaded(Optional<User> user, Optional<Workshop> workshop) {}
 
     public ReservationService(UserRepository users,
                               WorkshopRepository workshops,
@@ -33,27 +34,12 @@ public final class ReservationService {
     }
 
     public ReservationResult reserve(String userId, String workshopId) throws InterruptedException {
-        Subtask<Optional<User>> user;
-        Subtask<Optional<Workshop>> workshop;
-        // Les deux lectures partent en parallèle, chacune sur son virtual thread ;
-        // join() attend la fin des deux et, si l'une échoue, annule l'autre.
-        try (var scope = StructuredTaskScope.open()) {
-            user = scope.fork(() -> users.findById(userId));
-            workshop = scope.fork(() -> workshops.findById(workshopId));
-            scope.join();
-        } catch (StructuredTaskScope.FailedException e) {
-            switch (e.getCause()) {
-                case RuntimeException re -> throw re;
-                case Error err -> throw err;
-                case InterruptedException ie -> throw ie;
-                case Throwable t -> throw new IllegalStateException(t);
-            }
-        }
+        var loaded = load(userId, workshopId);
 
-        if (user.get().isEmpty()) {
+        if (loaded.user().isEmpty()) {
             return new Rejected(Reason.USER_NOT_FOUND);
         }
-        var foundWorkshop = workshop.get();
+        var foundWorkshop = loaded.workshop();
         if (foundWorkshop.isEmpty()) {
             return new Rejected(Reason.WORKSHOP_NOT_FOUND);
         }
@@ -64,5 +50,23 @@ public final class ReservationService {
         var reservation = reservations.insert(userId, workshopId);
         events.created(reservation);
         return new Confirmed(reservation);
+    }
+
+    private Loaded load(String userId, String workshopId) throws InterruptedException {
+        // Les deux lectures partent en parallèle, chacune sur son virtual thread ;
+        // join() attend la fin des deux et, si l'une échoue, annule l'autre.
+        try (var scope = StructuredTaskScope.open()) {
+            var user = scope.fork(() -> users.findById(userId));
+            var workshop = scope.fork(() -> workshops.findById(workshopId));
+            scope.join();
+            return new Loaded(user.get(), workshop.get());
+        } catch (StructuredTaskScope.FailedException e) {
+            switch (e.getCause()) {
+                case RuntimeException re -> throw re;
+                case Error err -> throw err;
+                case InterruptedException ie -> throw ie;
+                case Throwable t -> throw new IllegalStateException(t);
+            }
+        }
     }
 }
