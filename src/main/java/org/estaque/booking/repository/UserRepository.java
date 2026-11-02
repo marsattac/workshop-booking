@@ -3,10 +3,13 @@ package org.estaque.booking.repository;
 import org.estaque.booking.context.RequestContext;
 import org.estaque.booking.model.User;
 
+import org.springframework.stereotype.Repository;
+
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
+@Repository
 public final class UserRepository {
 
     private final Map<String, User> users = new ConcurrentHashMap<>();

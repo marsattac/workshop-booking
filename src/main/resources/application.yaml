@@ -1,6 +1,12 @@
 spring:
   application:
     name: workshop-booking
+  mvc:
+    problemdetails:
+      enabled: true
   threads:
     virtual:
       enabled: true
+
+booking:
+  db-latency: 200ms

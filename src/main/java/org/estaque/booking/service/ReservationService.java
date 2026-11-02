@@ -11,9 +11,12 @@ import org.estaque.booking.service.result.Reason;
 import org.estaque.booking.service.result.Rejected;
 import org.estaque.booking.service.result.ReservationResult;
 
+import org.springframework.stereotype.Service;
+
 import java.util.Optional;
 import java.util.concurrent.StructuredTaskScope;
 
+@Service
 public final class ReservationService {
 
     private final UserRepository users;
