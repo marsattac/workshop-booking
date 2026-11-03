@@ -58,7 +58,7 @@ class ReservationControllerTest {
     void returnsNotFoundForUnknownUser() throws Exception {
         given(service.reserve("u1", "w1")).willReturn(new Rejected(Reason.USER_NOT_FOUND));
 
-        assertProblem(postReservation("{\"userId\":\"u1\"}"), 404, "Not Found", "Utilisateur introuvable : u1");
+        assertProblem(postReservation("{\"userId\":\"u1\"}"), 404, "Not Found", "USER_NOT_FOUND", "Utilisateur introuvable : u1");
     }
 
     @Test
@@ -66,7 +66,7 @@ class ReservationControllerTest {
     void returnsNotFoundForUnknownWorkshop() throws Exception {
         given(service.reserve("u1", "w1")).willReturn(new Rejected(Reason.WORKSHOP_NOT_FOUND));
 
-        assertProblem(postReservation("{\"userId\":\"u1\"}"), 404, "Not Found", "Atelier introuvable : w1");
+        assertProblem(postReservation("{\"userId\":\"u1\"}"), 404, "Not Found", "WORKSHOP_NOT_FOUND", "Atelier introuvable : w1");
     }
 
     @Test
@@ -74,7 +74,7 @@ class ReservationControllerTest {
     void returnsConflictWhenFull() throws Exception {
         given(service.reserve("u1", "w1")).willReturn(new Rejected(Reason.FULL));
 
-        assertProblem(postReservation("{\"userId\":\"u1\"}"), 409, "Conflict", "Atelier complet : w1");
+        assertProblem(postReservation("{\"userId\":\"u1\"}"), 409, "Conflict", "FULL", "Atelier complet : w1");
     }
 
     @Test
@@ -133,11 +133,12 @@ class ReservationControllerTest {
         return mvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON).content(body));
     }
 
-    private void assertProblem(ResultActions result, int status, String title, String detail) throws Exception {
+    private void assertProblem(ResultActions result, int status, String title, String code, String detail) throws Exception {
         result.andExpect(status().is(status))
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.title").value(title))
                 .andExpect(jsonPath("$.status").value(status))
+                .andExpect(jsonPath("$.code").value(code))
                 .andExpect(jsonPath("$.detail").value(detail))
                 .andExpect(jsonPath("$.instance").value(URL));
     }

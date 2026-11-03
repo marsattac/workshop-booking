@@ -45,7 +45,7 @@ public class ReservationController {
     }
 
     private static ProblemDetail problem(Reason reason, String userId, String workshopId) {
-        return switch (reason) {
+        var problem = switch (reason) {
             case USER_NOT_FOUND -> ProblemDetail.forStatusAndDetail(
                     HttpStatus.NOT_FOUND, "Utilisateur introuvable : " + userId);
             case WORKSHOP_NOT_FOUND -> ProblemDetail.forStatusAndDetail(
@@ -53,5 +53,7 @@ public class ReservationController {
             case FULL -> ProblemDetail.forStatusAndDetail(
                     HttpStatus.CONFLICT, "Atelier complet : " + workshopId);
         };
+        problem.setProperty("code", reason.name());
+        return problem;
     }
 }
