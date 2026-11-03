@@ -42,3 +42,5 @@ Module 2: SpringBoot & Postgres
 
 Agent globally succeeded in migrating the project to the adequate SpringBoot version, covering business correctly and handling errors.
 It just failed at activating virtual threads in the config file.
+
+Agent has been very relevant with the overload of test configuration by suggesting a more refined src/test/resources/config/application.yaml path.
