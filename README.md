@@ -1,6 +1,7 @@
 # workshop-booking
 Training repository for agentic coding
 
+Module 1 : Modern Java & AI tools
 Agent succeeded in :
 - refactoring a legacy reactive vertx implementation into modern sequential java 25 with virtual threads
 - detecting a potential concurrency issue
@@ -36,3 +37,8 @@ The repositories also log the fallback value instead of the request id:
 ```
 
 Threads started by an executor do not inherit scoped values, whereas subtasks forked in a `StructuredTaskScope` opened inside the binding do. The code was restored to `StructuredTaskScope` after the experiment.
+
+Module 2: SpringBoot & Postgres
+
+Agent globally succeeded in migrating the project to the adequate SpringBoot version, covering business correctly and handling errors.
+It just failed at activating virtual threads in the config file.
