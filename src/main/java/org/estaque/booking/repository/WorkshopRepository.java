@@ -10,7 +10,7 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Repository
-public final class WorkshopRepository {
+public class WorkshopRepository {
 
     private final Map<String, Workshop> workshops = new ConcurrentHashMap<>();
     private final Latency latency;

@@ -17,7 +17,7 @@ import java.util.Optional;
 import java.util.concurrent.StructuredTaskScope;
 
 @Service
-public final class ReservationService {
+public class ReservationService {
 
     private final UserRepository users;
     private final WorkshopRepository workshops;

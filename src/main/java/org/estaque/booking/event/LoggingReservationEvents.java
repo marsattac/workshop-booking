@@ -6,7 +6,7 @@ import org.springframework.stereotype.Component;
 
 /** Journalise les réservations créées en attendant un véritable event bus. */
 @Component
-public final class LoggingReservationEvents implements ReservationEvents {
+public class LoggingReservationEvents implements ReservationEvents {
 
     @Override
     public void created(Reservation reservation) {

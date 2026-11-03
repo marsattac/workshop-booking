@@ -10,7 +10,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Repository
-public final class ReservationRepository {
+public class ReservationRepository {
 
     private final Map<String, Reservation> reservations = new ConcurrentHashMap<>();
     private final Latency latency;

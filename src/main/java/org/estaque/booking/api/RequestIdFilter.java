@@ -18,7 +18,7 @@ import java.util.regex.Pattern;
 /** Lie X-Request-Id à REQUEST_ID pour toute la requête et le renvoie dans la réponse. */
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE)
-public final class RequestIdFilter extends OncePerRequestFilter {
+public class RequestIdFilter extends OncePerRequestFilter {
 
     public static final String HEADER = "X-Request-Id";
 
