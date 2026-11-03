@@ -10,6 +10,7 @@ import org.estaque.booking.service.result.Rejected;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -36,6 +37,14 @@ public class ReservationController {
         };
     }
 
+    @GetMapping("/{reservationId}")
+    public ResponseEntity<?> get(@PathVariable String workshopId,
+                                 @PathVariable String reservationId) throws InterruptedException {
+        return service.find(workshopId, reservationId)
+                .<ResponseEntity<?>>map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.of(reservationNotFound(reservationId)).build());
+    }
+
     private static ResponseEntity<Reservation> created(Reservation reservation) {
         var location = ServletUriComponentsBuilder.fromCurrentRequest()
                 .path("/{reservationId}")
@@ -54,6 +63,13 @@ public class ReservationController {
                     HttpStatus.CONFLICT, "Atelier complet : " + workshopId);
         };
         problem.setProperty("code", reason.name());
+        return problem;
+    }
+
+    private static ProblemDetail reservationNotFound(String reservationId) {
+        var problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.NOT_FOUND, "Réservation introuvable : " + reservationId);
+        problem.setProperty("code", "RESERVATION_NOT_FOUND");
         return problem;
     }
 }

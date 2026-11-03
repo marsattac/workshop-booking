@@ -1,6 +1,7 @@
 package org.estaque.booking.service;
 
 import org.estaque.booking.event.ReservationEvents;
+import org.estaque.booking.model.Reservation;
 import org.estaque.booking.model.User;
 import org.estaque.booking.model.Workshop;
 import org.estaque.booking.repository.ReservationRepository;
@@ -53,6 +54,12 @@ public class ReservationService {
         var reservation = reservations.insert(userId, workshopId);
         events.created(reservation);
         return new Confirmed(reservation);
+    }
+
+    /** Réservation {@code reservationId}, si elle existe et appartient bien à l'atelier {@code workshopId}. */
+    public Optional<Reservation> find(String workshopId, String reservationId) throws InterruptedException {
+        return reservations.findById(reservationId)
+                .filter(reservation -> reservation.workshopId().equals(workshopId));
     }
 
     private Loaded load(String userId, String workshopId) throws InterruptedException {

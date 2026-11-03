@@ -20,6 +20,7 @@ import org.junit.jupiter.api.Test;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -189,6 +190,23 @@ class ReservationServiceTest {
         assertTrue(results.contains(new Rejected(Reason.FULL)), () -> "l'autre doit être refusée (FULL) : " + results);
         assertEquals(1, reservations.findAll().size());
         assertEquals(1, published.size());
+    }
+
+    @Test
+    @DisplayName("find : renvoie une réservation existante de l'atelier")
+    void findsExistingReservation() throws Exception {
+        var confirmed = (Confirmed) service.reserve("u1", "w1");
+
+        assertEquals(Optional.of(confirmed.reservation()), service.find("w1", confirmed.reservation().id()));
+    }
+
+    @Test
+    @DisplayName("find : vide pour un identifiant inconnu ou une réservation d'un autre atelier")
+    void findsNothingForUnknownOrForeignReservation() throws Exception {
+        var confirmed = (Confirmed) service.reserve("u1", "w1");
+
+        assertTrue(service.find("w1", "unknown").isEmpty());
+        assertTrue(service.find("w2", confirmed.reservation().id()).isEmpty());
     }
 
     private void assertRejected(Reason expected, ReservationResult result) {

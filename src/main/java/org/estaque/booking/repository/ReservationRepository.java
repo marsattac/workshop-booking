@@ -6,6 +6,7 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -24,6 +25,11 @@ public class ReservationRepository {
         var reservation = new Reservation(UUID.randomUUID().toString(), userId, workshopId);
         reservations.put(reservation.id(), reservation);
         return reservation;
+    }
+
+    public Optional<Reservation> findById(String id) throws InterruptedException {
+        latency.simulate();
+        return Optional.ofNullable(reservations.get(id));
     }
 
     public List<Reservation> findAll() {

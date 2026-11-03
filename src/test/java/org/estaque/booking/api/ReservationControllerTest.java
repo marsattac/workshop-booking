@@ -16,6 +16,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.hamcrest.Matchers.emptyOrNullString;
@@ -23,6 +24,7 @@ import static org.hamcrest.Matchers.not;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
@@ -129,17 +131,43 @@ class ReservationControllerTest {
                 .andExpect(header().string(RequestIdFilter.HEADER, not(emptyOrNullString())));
     }
 
+    @Test
+    @DisplayName("réservation existante : 200 et réservation dans le corps")
+    void returnsReservation() throws Exception {
+        given(service.find("w1", "r1")).willReturn(Optional.of(new Reservation("r1", "u1", "w1")));
+
+        mvc.perform(get(URL + "/r1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value("r1"))
+                .andExpect(jsonPath("$.userId").value("u1"))
+                .andExpect(jsonPath("$.workshopId").value("w1"));
+    }
+
+    @Test
+    @DisplayName("réservation inconnue : 404 avec ProblemDetail")
+    void returnsNotFoundForUnknownReservation() throws Exception {
+        given(service.find("w1", "r1")).willReturn(Optional.empty());
+
+        assertProblem(mvc.perform(get(URL + "/r1")), 404, "Not Found", "RESERVATION_NOT_FOUND",
+                "Réservation introuvable : r1", URL + "/r1");
+    }
+
     private ResultActions postReservation(String body) throws Exception {
         return mvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON).content(body));
     }
 
     private void assertProblem(ResultActions result, int status, String title, String code, String detail) throws Exception {
+        assertProblem(result, status, title, code, detail, URL);
+    }
+
+    private void assertProblem(ResultActions result, int status, String title, String code, String detail,
+                               String instance) throws Exception {
         result.andExpect(status().is(status))
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.title").value(title))
                 .andExpect(jsonPath("$.status").value(status))
                 .andExpect(jsonPath("$.code").value(code))
                 .andExpect(jsonPath("$.detail").value(detail))
-                .andExpect(jsonPath("$.instance").value(URL));
+                .andExpect(jsonPath("$.instance").value(instance));
     }
 }
