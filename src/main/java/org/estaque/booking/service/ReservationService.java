@@ -56,7 +56,7 @@ public class ReservationService {
         try {
             reservation = reservations.insert(userId, workshopId);
         } catch (DuplicateKeyException e) {
-            // Contrainte d'unicité (user_id, workshop_id) : l'utilisateur a déjà réservé cet atelier.
+            // Unique constraint (user_id, workshop_id): the user has already booked this workshop.
             return new Rejected(Reason.ALREADY_RESERVED);
         }
         events.created(reservation);
@@ -70,8 +70,8 @@ public class ReservationService {
     }
 
     private Loaded load(String userId, String workshopId) throws InterruptedException {
-        // Les deux lectures partent en parallèle, chacune sur son virtual thread ;
-        // join() attend la fin des deux et, si l'une échoue, annule l'autre.
+        // Both reads run in parallel, each on its own virtual thread;
+        // join() waits for both and, if one fails, cancels the other.
         try (var scope = StructuredTaskScope.open()) {
             var user = scope.fork(() -> users.findById(userId));
             var workshop = scope.fork(() -> workshops.findById(workshopId));

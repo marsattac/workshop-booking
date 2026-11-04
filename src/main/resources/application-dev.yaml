@@ -1,4 +1,4 @@
 spring:
   flyway:
-    # Ajoute les données de démo au schéma.
+    # Adds the demo data on top of the schema.
     locations: classpath:db/migration,classpath:db/demo

@@ -38,8 +38,8 @@ import static org.junit.jupiter.api.Assertions.*;
 @JdbcTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @Import(TestcontainersConfiguration.class)
-// Pas de transaction de test : les réservations concurrentes passent par d'autres connexions
-// et doivent voir les données insérées dans setUp().
+// No test transaction: concurrent reservations use other connections
+// and must see the data inserted in setUp().
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 class ReservationServiceTest {
 
@@ -124,7 +124,7 @@ class ReservationServiceTest {
         service.reserve("u1", "w1");
         var elapsed = Duration.ofNanos(System.nanoTime() - start);
 
-        // En séquentiel on attendrait au moins 3 x 200 ms (2 lectures de user et de workshop et 1 insertion de la réservation).
+        // Sequentially it would take at least 3 x 200 ms (2 reads, of the user and the workshop, and 1 insert of the reservation).
         assertTrue(elapsed.compareTo(DB_LATENCY.multipliedBy(3)) < 0,
                 () -> "chargement non parallèle : " + elapsed.toMillis() + " ms");
     }
@@ -168,7 +168,7 @@ class ReservationServiceTest {
         int count = 1000;
         int seats = 100;
         workshops.save(new Workshop("w-big", "Grand amphi", seats));
-        // Un utilisateur ne réserve qu'une fois un atelier : une réservation par utilisateur.
+        // A user can book a workshop only once: one reservation per user.
         for (int i = 0; i < count; i++) {
             users.save(new User("u-big-" + i, "Participant " + i));
         }
@@ -197,8 +197,8 @@ class ReservationServiceTest {
         assertEquals(count - seats, full, "réservations refusées (FULL)");
         assertEquals(seats, reservations.findAll().size());
         assertEquals(seats, published.size());
-        // Toutes les réservations se chevauchent : le temps total reste proche de celui d'une seule
-        // réservation confirmée, soit 2 x DB_LATENCY (lectures parallèles, puis insertion).
+        // All reservations overlap: the total time stays close to that of a single
+        // confirmed reservation, i.e. 2 x DB_LATENCY (parallel reads, then insert).
         var singleReservation = DB_LATENCY.multipliedBy(2);
         var limit = singleReservation.multipliedBy(2);
         assertTrue(elapsed.compareTo(limit) < 0,

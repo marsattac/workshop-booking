@@ -13,7 +13,7 @@ import java.util.UUID;
 @Repository
 public class ReservationRepository {
 
-    // La colonne id est un UUID ; le modèle le manipule en String.
+    // The id column is a UUID; the model handles it as a String.
     private static final RowMapper<Reservation> RESERVATION = (rs, _) ->
             new Reservation(rs.getString("id"), rs.getString("user_id"), rs.getString("workshop_id"));
 
@@ -39,7 +39,7 @@ public class ReservationRepository {
     }
 
     public Optional<Reservation> findById(String id) throws InterruptedException {
-        // Un identifiant qui n'est pas un UUID ne peut désigner aucune réservation.
+        // An id that is not a UUID cannot match any reservation.
         var uuid = parseUuid(id);
         if (uuid.isEmpty()) {
             return Optional.empty();

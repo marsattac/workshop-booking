@@ -22,7 +22,7 @@ public class RequestIdFilter extends OncePerRequestFilter {
 
     public static final String HEADER = "X-Request-Id";
 
-    // L'en-tête vient du client et finit dans les logs : tout autre format est remplacé.
+    // The header comes from the client and ends up in the logs: any other format is replaced.
     private static final Pattern VALID_ID = Pattern.compile("[A-Za-z0-9._-]{1,64}");
 
     @Override

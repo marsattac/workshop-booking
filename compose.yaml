@@ -1,6 +1,6 @@
-# Base PostgreSQL de développement.
-# Démarrée et arrêtée automatiquement par spring-boot-docker-compose au lancement de l'application,
-# ou à la main : docker compose up -d (fonctionne avec Docker comme avec OrbStack).
+# Development PostgreSQL database.
+# Started and stopped automatically by spring-boot-docker-compose when the application runs,
+# or by hand: docker compose up -d (works with Docker as well as OrbStack).
 services:
   postgres:
     image: 'postgres:18'
@@ -9,7 +9,7 @@ services:
       POSTGRES_USER: 'booking'
       POSTGRES_PASSWORD: 'booking'
     ports:
-      # Port hôte aléatoire : Spring Boot le découvre et construit l'URL JDBC lui-même.
+      # Random host port: Spring Boot discovers it and builds the JDBC URL itself.
       - '5432'
     volumes:
       - 'postgres-data:/var/lib/postgresql'

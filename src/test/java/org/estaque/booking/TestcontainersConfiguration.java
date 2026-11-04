@@ -13,7 +13,7 @@ public class TestcontainersConfiguration {
     @Bean
     @ServiceConnection
     PostgreSQLContainer postgres() {
-        // Même image que compose.yaml.
+        // Same image as compose.yaml.
         return new PostgreSQLContainer(DockerImageName.parse("postgres:18"));
     }
 }

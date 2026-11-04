@@ -1,5 +1,5 @@
--- Données de démo, chargées uniquement avec le profil dev (voir application-dev.yaml).
--- Migration répétable : Flyway la rejoue quand ce fichier change, d'où les ON CONFLICT.
+-- Demo data, loaded only with the dev profile (see application-dev.yaml).
+-- Repeatable migration: Flyway reruns it whenever this file changes, hence the ON CONFLICT clauses.
 
 INSERT INTO users (id, name) VALUES
     ('u1', 'Alice'),
