@@ -32,23 +32,27 @@ public class WorkshopRepository {
     }
 
     /**
-     * Takes a seat if the workshop still has one.
+     * Reads the seats left and locks the workshop row until the end of the current transaction
+     * (pessimistic lock, {@code SELECT ... FOR UPDATE}).
      *
-     * <p>Business rule enforced in SQL: a workshop can only be booked while at least one seat is left.
-     * PostgreSQL evaluates {@code seats_left > 0} while it holds the row lock, so two concurrent
-     * reservations cannot both take the last seat. Checking {@link Workshop#seatsLeft()} in Java
-     * and then decrementing would let both through.
-     * The schema's CHECK (seats_left >= 0) constraint remains the last line of defense.
+     * <p>Must be called inside a transaction: concurrent reservations of the same workshop wait here
+     * for the lock, so the value returned cannot change before {@link #updateSeatsLeft} is called.
      *
-     * @return {@code true} if a seat was taken, {@code false} if the workshop is full or does not exist
+     * @return the seats left, or empty if the workshop does not exist
      */
-    public boolean takeSeat(String id) {
-        return jdbc.sql("""
-                        UPDATE workshops SET seats_left = seats_left - 1
-                        WHERE id = :id AND seats_left > 0
-                        """)
+    public Optional<Integer> lockSeatsLeft(String id) {
+        return jdbc.sql("SELECT seats_left FROM workshops WHERE id = :id FOR UPDATE")
                 .param("id", id)
-                .update() == 1;
+                .query(Integer.class)
+                .optional();
+    }
+
+    /** Sets the seats left; call it under the lock taken by {@link #lockSeatsLeft}. */
+    public void updateSeatsLeft(String id, int seatsLeft) {
+        jdbc.sql("UPDATE workshops SET seats_left = :seatsLeft WHERE id = :id")
+                .param("id", id)
+                .param("seatsLeft", seatsLeft)
+                .update();
     }
 
     public Optional<Workshop> findById(String id) throws InterruptedException {

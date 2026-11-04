@@ -52,7 +52,7 @@ public class ReservationService {
             return new Rejected(Reason.WORKSHOP_NOT_FOUND);
         }
         // No check on seatsLeft here: the value read may already be stale. The "a seat is left"
-        // rule is enforced by the SQL in WorkshopRepository.takeSeat.
+        // rule is checked in book(), on a value read under the workshop row lock.
 
         var result = book(userId, workshopId);
         if (result instanceof Confirmed(var reservation)) {
@@ -70,9 +70,16 @@ public class ReservationService {
      */
     private ReservationResult book(String userId, String workshopId) {
         return transactions.execute(status -> {
-            if (!workshops.takeSeat(workshopId)) {
+            // Pessimistic lock: concurrent reservations of this workshop wait here until we commit
+            // or roll back, so the "a seat is left" rule can be checked in Java on a fresh value.
+            var seatsLeft = workshops.lockSeatsLeft(workshopId);
+            if (seatsLeft.isEmpty()) {
+                return new Rejected(Reason.WORKSHOP_NOT_FOUND);
+            }
+            if (seatsLeft.get() <= 0) {
                 return new Rejected(Reason.FULL);
             }
+            workshops.updateSeatsLeft(workshopId, seatsLeft.get() - 1);
             try {
                 return new Confirmed(reservations.insert(userId, workshopId));
             } catch (DuplicateKeyException e) {
