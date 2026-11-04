@@ -12,6 +12,8 @@ import org.estaque.booking.service.result.Reason;
 import org.estaque.booking.service.result.Rejected;
 import org.estaque.booking.service.result.ReservationResult;
 
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionOperations;
@@ -27,6 +29,7 @@ public class ReservationService {
     private final ReservationRepository reservations;
     private final ReservationEvents events;
     private final TransactionOperations transactions;
+    private final Counter retries;
 
     private record Loaded(Optional<User> user, Optional<Workshop> workshop) {}
 
@@ -34,12 +37,16 @@ public class ReservationService {
                               WorkshopRepository workshops,
                               ReservationRepository reservations,
                               ReservationEvents events,
-                              TransactionOperations transactions) {
+                              TransactionOperations transactions,
+                              MeterRegistry meters) {
         this.users = users;
         this.workshops = workshops;
         this.reservations = reservations;
         this.events = events;
         this.transactions = transactions;
+        this.retries = Counter.builder("booking.reservations.optimistic.retries")
+                .description("Seat updates retried because the workshop version changed")
+                .register(meters);
     }
 
     public ReservationResult reserve(String userId, String workshopId) throws InterruptedException {
@@ -52,7 +59,7 @@ public class ReservationService {
             return new Rejected(Reason.WORKSHOP_NOT_FOUND);
         }
         // No check on seatsLeft here: the value read may already be stale. The "a seat is left"
-        // rule is enforced by the SQL in WorkshopRepository.takeSeat.
+        // rule is checked in book(), and the workshop version makes sure the value is still current.
 
         var result = book(userId, workshopId);
         if (result instanceof Confirmed(var reservation)) {
@@ -70,8 +77,21 @@ public class ReservationService {
      */
     private ReservationResult book(String userId, String workshopId) {
         return transactions.execute(status -> {
-            if (!workshops.takeSeat(workshopId)) {
-                return new Rejected(Reason.FULL);
+            // Optimistic lock: read the seats and their version, check the rule in Java, then update
+            // only if the version is unchanged. Otherwise someone else took a seat in between: retry.
+            // No retry limit: each failed attempt means another reservation succeeded, and seats run out.
+            while (true) {
+                var seats = workshops.findSeats(workshopId);
+                if (seats.isEmpty()) {
+                    return new Rejected(Reason.WORKSHOP_NOT_FOUND);
+                }
+                if (seats.get().seatsLeft() <= 0) {
+                    return new Rejected(Reason.FULL);
+                }
+                if (workshops.takeSeat(workshopId, seats.get())) {
+                    break;
+                }
+                retries.increment();
             }
             try {
                 return new Confirmed(reservations.insert(userId, workshopId));

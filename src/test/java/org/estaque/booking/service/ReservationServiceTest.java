@@ -14,6 +14,7 @@ import org.estaque.booking.service.result.Reason;
 import org.estaque.booking.service.result.Rejected;
 import org.estaque.booking.service.result.ReservationResult;
 
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -54,6 +55,7 @@ class ReservationServiceTest {
     private PlatformTransactionManager transactionManager;
 
     private TransactionTemplate transactions;
+    private SimpleMeterRegistry meters;
 
     private UserRepository users;
     private WorkshopRepository workshops;
@@ -66,11 +68,12 @@ class ReservationServiceTest {
         jdbc.sql("TRUNCATE reservations, workshops, users").update();
 
         transactions = new TransactionTemplate(transactionManager);
+        meters = new SimpleMeterRegistry();
         var latency = Latency.of(DB_LATENCY);
         users = new UserRepository(jdbc, latency);
         workshops = new WorkshopRepository(jdbc, latency);
         reservations = new ReservationRepository(jdbc);
-        service = new ReservationService(users, workshops, reservations, published::add, transactions);
+        service = new ReservationService(users, workshops, reservations, published::add, transactions, meters);
 
         users.save(new User("u1", "Alice"));
         workshops.save(new Workshop("w1", "Java 25", 3));
@@ -149,7 +152,7 @@ class ReservationServiceTest {
         spiedUsers.save(new User("u1", "Alice"));
         spiedWorkshops.save(new Workshop("w1", "Java 25", 3));
 
-        new ReservationService(spiedUsers, spiedWorkshops, reservations, published::add, transactions).reserve("u1", "w1");
+        new ReservationService(spiedUsers, spiedWorkshops, reservations, published::add, transactions, meters).reserve("u1", "w1");
 
         assertEquals(2, threads.size());
         assertTrue(threads.stream().allMatch(Thread::isVirtual));
@@ -165,7 +168,7 @@ class ReservationServiceTest {
         var spiedWorkshops = new WorkshopRepository(jdbc, recordRequestId);
         spiedUsers.save(new User("u1", "Alice"));
         spiedWorkshops.save(new Workshop("w1", "Java 25", 3));
-        var spiedService = new ReservationService(spiedUsers, spiedWorkshops, reservations, published::add, transactions);
+        var spiedService = new ReservationService(spiedUsers, spiedWorkshops, reservations, published::add, transactions, meters);
 
         ScopedValue.where(RequestContext.REQUEST_ID, "req-42").call(() -> spiedService.reserve("u1", "w1"));
 
@@ -192,7 +195,8 @@ class ReservationServiceTest {
             }
         }
         var elapsed = Duration.ofNanos(System.nanoTime() - start);
-        System.out.printf("%d réservations simultanées en %d ms%n", count, elapsed.toMillis());
+        System.out.printf("%d réservations simultanées en %d ms, %.0f nouvelles tentatives%n", count, elapsed.toMillis(),
+                meters.counter("booking.reservations.optimistic.retries").count());
 
         int confirmed = 0;
         int full = 0;

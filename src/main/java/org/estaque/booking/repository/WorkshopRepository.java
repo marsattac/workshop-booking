@@ -31,23 +31,33 @@ public class WorkshopRepository {
                 .update();
     }
 
+    /** Seats left in a workshop, with the version they were read at. */
+    public record Seats(int seatsLeft, long version) {}
+
+    /** Reads the seats left and their version, without locking anything. */
+    public Optional<Seats> findSeats(String id) {
+        return jdbc.sql("SELECT seats_left, version FROM workshops WHERE id = :id")
+                .param("id", id)
+                .query(Seats.class)
+                .optional();
+    }
+
     /**
-     * Takes a seat if the workshop still has one.
+     * Takes a seat if nobody updated the workshop since {@code seats} was read (optimistic lock).
      *
-     * <p>Business rule enforced in SQL: a workshop can only be booked while at least one seat is left.
-     * PostgreSQL evaluates {@code seats_left > 0} while it holds the row lock, so two concurrent
-     * reservations cannot both take the last seat. Checking {@link Workshop#seatsLeft()} in Java
-     * and then decrementing would let both through.
+     * <p>The "a seat is left" rule is checked in Java by the caller on {@code seats}; the version in
+     * the WHERE clause guarantees that this value is still current when the update applies.
      * The schema's CHECK (seats_left >= 0) constraint remains the last line of defense.
      *
-     * @return {@code true} if a seat was taken, {@code false} if the workshop is full or does not exist
+     * @return {@code true} if a seat was taken, {@code false} if the version changed in the meantime
      */
-    public boolean takeSeat(String id) {
+    public boolean takeSeat(String id, Seats seats) {
         return jdbc.sql("""
-                        UPDATE workshops SET seats_left = seats_left - 1
-                        WHERE id = :id AND seats_left > 0
+                        UPDATE workshops SET seats_left = seats_left - 1, version = version + 1
+                        WHERE id = :id AND version = :version
                         """)
                 .param("id", id)
+                .param("version", seats.version())
                 .update() == 1;
     }
 
