@@ -53,6 +53,8 @@ After every iteration of coding, the agent reported the attention point for whic
 
 I asked the agent to write the Javadoc in English (it was written in French)
 
+The agent suggested using TransactionTemplate for a book() subtask to target only the section facing concurrency issue over a global @Transactional annotation on reserve() that would have englobed and blocked the paralleled load() tasks.
+
 ### Concurrency strategies: benchmark
 
 Three ways to stop two reservations from taking the same last seat, each on its own branch:
