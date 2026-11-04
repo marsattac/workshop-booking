@@ -10,11 +10,15 @@ import org.estaque.booking.service.result.Confirmed;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.simple.JdbcClient;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @SpringBootTest
+@Import(TestcontainersConfiguration.class)
 class WorkshopBookingApplicationTests {
 
     @Autowired
@@ -29,8 +33,18 @@ class WorkshopBookingApplicationTests {
     @Autowired
     private ReservationRepository reservations;
 
+    @Autowired
+    private JdbcClient jdbc;
+
     @Test
     void contextLoads() {
+    }
+
+    @Test
+    void queriesPostgresThroughJdbcClient() {
+        var version = jdbc.sql("SHOW server_version_num").query(Integer.class).single();
+
+        assertEquals(18, version / 10_000);
     }
 
     @Test
