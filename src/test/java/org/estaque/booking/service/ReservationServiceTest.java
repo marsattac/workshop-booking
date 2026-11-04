@@ -22,8 +22,10 @@ import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabas
 import org.springframework.boot.jdbc.test.autoconfigure.JdbcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -48,6 +50,11 @@ class ReservationServiceTest {
     @Autowired
     private JdbcClient jdbc;
 
+    @Autowired
+    private PlatformTransactionManager transactionManager;
+
+    private TransactionTemplate transactions;
+
     private UserRepository users;
     private WorkshopRepository workshops;
     private ReservationRepository reservations;
@@ -58,11 +65,12 @@ class ReservationServiceTest {
     void setUp() {
         jdbc.sql("TRUNCATE reservations, workshops, users").update();
 
+        transactions = new TransactionTemplate(transactionManager);
         var latency = Latency.of(DB_LATENCY);
         users = new UserRepository(jdbc, latency);
         workshops = new WorkshopRepository(jdbc, latency);
-        reservations = new ReservationRepository(jdbc, latency);
-        service = new ReservationService(users, workshops, reservations, published::add);
+        reservations = new ReservationRepository(jdbc);
+        service = new ReservationService(users, workshops, reservations, published::add, transactions);
 
         users.save(new User("u1", "Alice"));
         workshops.save(new Workshop("w1", "Java 25", 3));
@@ -81,6 +89,7 @@ class ReservationServiceTest {
         assertNotNull(reservation.id());
         assertEquals(List.of(reservation), reservations.findAll());
         assertEquals(List.of(reservation), published);
+        assertEquals(2, seatsLeft("w1"), "une place doit être prise");
     }
 
     @Test
@@ -115,6 +124,7 @@ class ReservationServiceTest {
         assertEquals(new Rejected(Reason.ALREADY_RESERVED), service.reserve("u1", "w1"));
         assertEquals(List.of(first.reservation()), reservations.findAll());
         assertEquals(List.of(first.reservation()), published);
+        assertEquals(2, seatsLeft("w1"), "le doublon ne doit pas prendre de place");
     }
 
     @Test
@@ -124,8 +134,8 @@ class ReservationServiceTest {
         service.reserve("u1", "w1");
         var elapsed = Duration.ofNanos(System.nanoTime() - start);
 
-        // Sequentially it would take at least 3 x 200 ms (2 reads, of the user and the workshop, and 1 insert of the reservation).
-        assertTrue(elapsed.compareTo(DB_LATENCY.multipliedBy(3)) < 0,
+        // Sequentially it would take at least 2 x 200 ms (read the user, then the workshop).
+        assertTrue(elapsed.compareTo(DB_LATENCY.multipliedBy(2)) < 0,
                 () -> "chargement non parallèle : " + elapsed.toMillis() + " ms");
     }
 
@@ -139,7 +149,7 @@ class ReservationServiceTest {
         spiedUsers.save(new User("u1", "Alice"));
         spiedWorkshops.save(new Workshop("w1", "Java 25", 3));
 
-        new ReservationService(spiedUsers, spiedWorkshops, reservations, published::add).reserve("u1", "w1");
+        new ReservationService(spiedUsers, spiedWorkshops, reservations, published::add, transactions).reserve("u1", "w1");
 
         assertEquals(2, threads.size());
         assertTrue(threads.stream().allMatch(Thread::isVirtual));
@@ -155,7 +165,7 @@ class ReservationServiceTest {
         var spiedWorkshops = new WorkshopRepository(jdbc, recordRequestId);
         spiedUsers.save(new User("u1", "Alice"));
         spiedWorkshops.save(new Workshop("w1", "Java 25", 3));
-        var spiedService = new ReservationService(spiedUsers, spiedWorkshops, reservations, published::add);
+        var spiedService = new ReservationService(spiedUsers, spiedWorkshops, reservations, published::add, transactions);
 
         ScopedValue.where(RequestContext.REQUEST_ID, "req-42").call(() -> spiedService.reserve("u1", "w1"));
 
@@ -197,10 +207,11 @@ class ReservationServiceTest {
         assertEquals(count - seats, full, "réservations refusées (FULL)");
         assertEquals(seats, reservations.findAll().size());
         assertEquals(seats, published.size());
-        // All reservations overlap: the total time stays close to that of a single
-        // confirmed reservation, i.e. 2 x DB_LATENCY (parallel reads, then insert).
-        var singleReservation = DB_LATENCY.multipliedBy(2);
-        var limit = singleReservation.multipliedBy(2);
+        assertEquals(0, seatsLeft("w-big"));
+        // Reservations overlap: sequentially, the reads alone would take 1000 x DB_LATENCY.
+        // Writes, however, go through one at a time: the conditional update locks the workshop row
+        // until each transaction ends. Hence a generous limit (about 1 s measured locally).
+        var limit = DB_LATENCY.multipliedBy(10);
         assertTrue(elapsed.compareTo(limit) < 0,
                 () -> "trop lent : " + elapsed.toMillis() + " ms (limite : " + limit.toMillis() + " ms)");
     }
@@ -224,6 +235,7 @@ class ReservationServiceTest {
         assertTrue(results.contains(new Rejected(Reason.FULL)), () -> "l'autre doit être refusée (FULL) : " + results);
         assertEquals(1, reservations.findAll().size());
         assertEquals(1, published.size());
+        assertEquals(0, seatsLeft("w-last"));
     }
 
     @Test
@@ -241,6 +253,13 @@ class ReservationServiceTest {
 
         assertTrue(service.find("w1", "unknown").isEmpty());
         assertTrue(service.find("w2", confirmed.reservation().id()).isEmpty());
+    }
+
+    private int seatsLeft(String workshopId) {
+        return jdbc.sql("SELECT seats_left FROM workshops WHERE id = :id")
+                .param("id", workshopId)
+                .query(Integer.class)
+                .single();
     }
 
     private void assertRejected(Reason expected, ReservationResult result) {

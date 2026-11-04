@@ -31,6 +31,26 @@ public class WorkshopRepository {
                 .update();
     }
 
+    /**
+     * Takes a seat if the workshop still has one.
+     *
+     * <p>Business rule enforced in SQL: a workshop can only be booked while at least one seat is left.
+     * PostgreSQL evaluates {@code seats_left > 0} while it holds the row lock, so two concurrent
+     * reservations cannot both take the last seat. Checking {@link Workshop#seatsLeft()} in Java
+     * and then decrementing would let both through.
+     * The schema's CHECK (seats_left >= 0) constraint remains the last line of defense.
+     *
+     * @return {@code true} if a seat was taken, {@code false} if the workshop is full or does not exist
+     */
+    public boolean takeSeat(String id) {
+        return jdbc.sql("""
+                        UPDATE workshops SET seats_left = seats_left - 1
+                        WHERE id = :id AND seats_left > 0
+                        """)
+                .param("id", id)
+                .update() == 1;
+    }
+
     public Optional<Workshop> findById(String id) throws InterruptedException {
         RequestContext.log("findById " + id);
         latency.simulate();

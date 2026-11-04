@@ -14,6 +14,7 @@ import org.estaque.booking.service.result.ReservationResult;
 
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionOperations;
 
 import java.util.Optional;
 import java.util.concurrent.StructuredTaskScope;
@@ -25,17 +26,20 @@ public class ReservationService {
     private final WorkshopRepository workshops;
     private final ReservationRepository reservations;
     private final ReservationEvents events;
+    private final TransactionOperations transactions;
 
     private record Loaded(Optional<User> user, Optional<Workshop> workshop) {}
 
     public ReservationService(UserRepository users,
                               WorkshopRepository workshops,
                               ReservationRepository reservations,
-                              ReservationEvents events) {
+                              ReservationEvents events,
+                              TransactionOperations transactions) {
         this.users = users;
         this.workshops = workshops;
         this.reservations = reservations;
         this.events = events;
+        this.transactions = transactions;
     }
 
     public ReservationResult reserve(String userId, String workshopId) throws InterruptedException {
@@ -44,27 +48,44 @@ public class ReservationService {
         if (loaded.user().isEmpty()) {
             return new Rejected(Reason.USER_NOT_FOUND);
         }
-        var foundWorkshop = loaded.workshop();
-        if (foundWorkshop.isEmpty()) {
+        if (loaded.workshop().isEmpty()) {
             return new Rejected(Reason.WORKSHOP_NOT_FOUND);
         }
-        if (foundWorkshop.get().seatsLeft() <= 0) {
-            return new Rejected(Reason.FULL);
-        }
+        // No check on seatsLeft here: the value read may already be stale. The "a seat is left"
+        // rule is enforced by the SQL in WorkshopRepository.takeSeat.
 
-        Reservation reservation;
-        try {
-            reservation = reservations.insert(userId, workshopId);
-        } catch (DuplicateKeyException e) {
-            // Unique constraint (user_id, workshop_id): the user has already booked this workshop.
-            return new Rejected(Reason.ALREADY_RESERVED);
+        var result = book(userId, workshopId);
+        if (result instanceof Confirmed(var reservation)) {
+            // Published once the transaction has committed, never for a rolled-back reservation.
+            events.created(reservation);
         }
-        events.created(reservation);
-        return new Confirmed(reservation);
+        return result;
+    }
+
+    /**
+     * Takes the seat, then saves the reservation, in a single transaction: one never happens without the other.
+     *
+     * <p>The transaction only covers these two writes, not the parallel reads of {@link #load}:
+     * it holds a connection for its whole duration, while each read borrows another one from the pool.
+     */
+    private ReservationResult book(String userId, String workshopId) {
+        return transactions.execute(status -> {
+            if (!workshops.takeSeat(workshopId)) {
+                return new Rejected(Reason.FULL);
+            }
+            try {
+                return new Confirmed(reservations.insert(userId, workshopId));
+            } catch (DuplicateKeyException e) {
+                // Unique constraint (user_id, workshop_id): the user has already booked this workshop.
+                // Give back the seat taken just before.
+                status.setRollbackOnly();
+                return new Rejected(Reason.ALREADY_RESERVED);
+            }
+        });
     }
 
     /** Reservation {@code reservationId}, if it exists and belongs to workshop {@code workshopId}. */
-    public Optional<Reservation> find(String workshopId, String reservationId) throws InterruptedException {
+    public Optional<Reservation> find(String workshopId, String reservationId) {
         return reservations.findById(reservationId)
                 .filter(reservation -> reservation.workshopId().equals(workshopId));
     }

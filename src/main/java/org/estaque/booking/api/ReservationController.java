@@ -39,7 +39,7 @@ public class ReservationController {
 
     @GetMapping("/{reservationId}")
     public ResponseEntity<?> get(@PathVariable String workshopId,
-                                 @PathVariable String reservationId) throws InterruptedException {
+                                 @PathVariable String reservationId) {
         return service.find(workshopId, reservationId)
                 .<ResponseEntity<?>>map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.of(reservationNotFound(reservationId)).build());

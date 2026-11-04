@@ -45,7 +45,7 @@ class RequestIdPropagationTest {
     private Latency latency;
 
     @Test
-    @DisplayName("X-Request-Id atteint les deux lectures parallèles et l'insertion")
+    @DisplayName("X-Request-Id atteint les deux lectures parallèles")
     void propagatesRequestIdToRepositories() throws Exception {
         var seenByRepositories = new CopyOnWriteArrayList<String>();
         willAnswer(_ -> seenByRepositories.add(RequestContext.REQUEST_ID.get())).given(latency).simulate();
@@ -59,6 +59,6 @@ class RequestIdPropagationTest {
                 .andExpect(status().isCreated())
                 .andExpect(header().string(RequestIdFilter.HEADER, "req-42"));
 
-        assertEquals(List.of("req-42", "req-42", "req-42"), seenByRepositories);
+        assertEquals(List.of("req-42", "req-42"), seenByRepositories);
     }
 }
