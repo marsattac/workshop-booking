@@ -63,7 +63,7 @@ public class ReservationService {
         return new Confirmed(reservation);
     }
 
-    /** Réservation {@code reservationId}, si elle existe et appartient bien à l'atelier {@code workshopId}. */
+    /** Reservation {@code reservationId}, if it exists and belongs to workshop {@code workshopId}. */
     public Optional<Reservation> find(String workshopId, String reservationId) throws InterruptedException {
         return reservations.findById(reservationId)
                 .filter(reservation -> reservation.workshopId().equals(workshopId));

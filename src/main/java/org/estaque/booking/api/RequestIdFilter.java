@@ -15,7 +15,7 @@ import java.io.IOException;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
-/** Lie X-Request-Id à REQUEST_ID pour toute la requête et le renvoie dans la réponse. */
+/** Binds X-Request-Id to REQUEST_ID for the whole request and echoes it in the response. */
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE)
 public class RequestIdFilter extends OncePerRequestFilter {

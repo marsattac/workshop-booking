@@ -2,7 +2,7 @@ package org.estaque.booking.repository;
 
 import java.time.Duration;
 
-/** Simule le temps d'accès à la base de données. */
+/** Simulates database access time. */
 @FunctionalInterface
 public interface Latency {
 

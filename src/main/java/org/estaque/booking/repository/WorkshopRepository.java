@@ -19,7 +19,7 @@ public class WorkshopRepository {
         this.latency = latency;
     }
 
-    /** Crée l'atelier, ou le remplace s'il existe déjà. */
+    /** Creates the workshop, or replaces it if it already exists. */
     public void save(Workshop workshop) {
         jdbc.sql("""
                         INSERT INTO workshops (id, title, seats_left) VALUES (:id, :title, :seatsLeft)

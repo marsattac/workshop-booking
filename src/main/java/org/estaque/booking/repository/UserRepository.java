@@ -19,7 +19,7 @@ public class UserRepository {
         this.latency = latency;
     }
 
-    /** Crée l'utilisateur, ou le remplace s'il existe déjà. */
+    /** Creates the user, or replaces it if it already exists. */
     public void save(User user) {
         jdbc.sql("""
                         INSERT INTO users (id, name) VALUES (:id, :name)

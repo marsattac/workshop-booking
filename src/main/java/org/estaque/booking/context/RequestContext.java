@@ -1,6 +1,6 @@
 package org.estaque.booking.context;
 
-/** Identifiant de la requête en cours, hérité par les sous-tâches d'un StructuredTaskScope. */
+/** Id of the current request, inherited by the subtasks of a StructuredTaskScope. */
 public final class RequestContext {
 
     public static final ScopedValue<String> REQUEST_ID = ScopedValue.newInstance();

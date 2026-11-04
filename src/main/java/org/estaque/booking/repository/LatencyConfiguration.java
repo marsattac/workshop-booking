@@ -9,7 +9,7 @@ import java.time.Duration;
 @Configuration(proxyBeanMethods = false)
 class LatencyConfiguration {
 
-    /** Aucune latence par défaut ; booking.db-latency permet d'en simuler une. */
+    /** No latency by default; set booking.db-latency to simulate some. */
     @Bean
     Latency latency(@Value("${booking.db-latency:0ms}") Duration dbLatency) {
         return dbLatency.isZero() ? Latency.NONE : Latency.of(dbLatency);

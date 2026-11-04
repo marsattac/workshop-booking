@@ -6,7 +6,7 @@ import org.springframework.context.annotation.Bean;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
-/** PostgreSQL jetable pour les tests qui démarrent un contexte Spring complet. */
+/** Throwaway PostgreSQL for tests that start a full Spring context. */
 @TestConfiguration(proxyBeanMethods = false)
 public class TestcontainersConfiguration {
 
