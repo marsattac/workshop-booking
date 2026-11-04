@@ -80,6 +80,15 @@ class ReservationControllerTest {
     }
 
     @Test
+    @DisplayName("atelier déjà réservé par l'utilisateur : 409 avec ProblemDetail")
+    void returnsConflictWhenAlreadyReserved() throws Exception {
+        given(service.reserve("u1", "w1")).willReturn(new Rejected(Reason.ALREADY_RESERVED));
+
+        assertProblem(postReservation("{\"userId\":\"u1\"}"), 409, "Conflict", "ALREADY_RESERVED",
+                "Atelier déjà réservé par l'utilisateur u1 : w1");
+    }
+
+    @Test
     @DisplayName("userId vide ou absent : 400 avec ProblemDetail, sans appel au service")
     void rejectsBlankUserId() throws Exception {
         postReservation("{\"userId\":\" \"}")

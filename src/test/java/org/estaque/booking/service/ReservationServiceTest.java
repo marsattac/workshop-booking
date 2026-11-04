@@ -1,5 +1,6 @@
 package org.estaque.booking.service;
 
+import org.estaque.booking.TestcontainersConfiguration;
 import org.estaque.booking.context.RequestContext;
 import org.estaque.booking.model.Reservation;
 import org.estaque.booking.model.User;
@@ -16,6 +17,13 @@ import org.estaque.booking.service.result.ReservationResult;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
+import org.springframework.boot.jdbc.test.autoconfigure.JdbcTest;
+import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -27,9 +35,18 @@ import java.util.concurrent.Future;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+@JdbcTest
+@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
+@Import(TestcontainersConfiguration.class)
+// Pas de transaction de test : les réservations concurrentes passent par d'autres connexions
+// et doivent voir les données insérées dans setUp().
+@Transactional(propagation = Propagation.NOT_SUPPORTED)
 class ReservationServiceTest {
 
     private static final Duration DB_LATENCY = Duration.ofMillis(200);
+
+    @Autowired
+    private JdbcClient jdbc;
 
     private UserRepository users;
     private WorkshopRepository workshops;
@@ -39,10 +56,12 @@ class ReservationServiceTest {
 
     @BeforeEach
     void setUp() {
+        jdbc.sql("TRUNCATE reservations, workshops, users").update();
+
         var latency = Latency.of(DB_LATENCY);
-        users = new UserRepository(latency);
-        workshops = new WorkshopRepository(latency);
-        reservations = new ReservationRepository(latency);
+        users = new UserRepository(jdbc, latency);
+        workshops = new WorkshopRepository(jdbc, latency);
+        reservations = new ReservationRepository(jdbc, latency);
         service = new ReservationService(users, workshops, reservations, published::add);
 
         users.save(new User("u1", "Alice"));
@@ -89,6 +108,16 @@ class ReservationServiceTest {
     }
 
     @Test
+    @DisplayName("atelier déjà réservé par l'utilisateur : ALREADY_RESERVED, sans nouvel événement")
+    void rejectsDuplicateReservation() throws InterruptedException {
+        var first = assertInstanceOf(Confirmed.class, service.reserve("u1", "w1"));
+
+        assertEquals(new Rejected(Reason.ALREADY_RESERVED), service.reserve("u1", "w1"));
+        assertEquals(List.of(first.reservation()), reservations.findAll());
+        assertEquals(List.of(first.reservation()), published);
+    }
+
+    @Test
     @DisplayName("utilisateur et atelier sont chargés en parallèle")
     void loadsUserAndWorkshopInParallel() throws InterruptedException {
         long start = System.nanoTime();
@@ -105,8 +134,8 @@ class ReservationServiceTest {
     void loadsOnVirtualThreads() throws InterruptedException {
         var threads = new CopyOnWriteArrayList<Thread>();
         Latency recordThread = () -> threads.add(Thread.currentThread());
-        var spiedUsers = new UserRepository(recordThread);
-        var spiedWorkshops = new WorkshopRepository(recordThread);
+        var spiedUsers = new UserRepository(jdbc, recordThread);
+        var spiedWorkshops = new WorkshopRepository(jdbc, recordThread);
         spiedUsers.save(new User("u1", "Alice"));
         spiedWorkshops.save(new Workshop("w1", "Java 25", 3));
 
@@ -122,8 +151,8 @@ class ReservationServiceTest {
     void propagatesRequestIdToParallelReads() throws InterruptedException {
         var requestIds = new CopyOnWriteArrayList<String>();
         Latency recordRequestId = () -> requestIds.add(RequestContext.REQUEST_ID.get());
-        var spiedUsers = new UserRepository(recordRequestId);
-        var spiedWorkshops = new WorkshopRepository(recordRequestId);
+        var spiedUsers = new UserRepository(jdbc, recordRequestId);
+        var spiedWorkshops = new WorkshopRepository(jdbc, recordRequestId);
         spiedUsers.save(new User("u1", "Alice"));
         spiedWorkshops.save(new Workshop("w1", "Java 25", 3));
         var spiedService = new ReservationService(spiedUsers, spiedWorkshops, reservations, published::add);
@@ -139,12 +168,17 @@ class ReservationServiceTest {
         int count = 1000;
         int seats = 100;
         workshops.save(new Workshop("w-big", "Grand amphi", seats));
+        // Un utilisateur ne réserve qu'une fois un atelier : une réservation par utilisateur.
+        for (int i = 0; i < count; i++) {
+            users.save(new User("u-big-" + i, "Participant " + i));
+        }
 
         long start = System.nanoTime();
         List<Future<ReservationResult>> results = new ArrayList<>();
         try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
             for (int i = 0; i < count; i++) {
-                results.add(executor.submit(() -> service.reserve("u1", "w-big")));
+                var userId = "u-big-" + i;
+                results.add(executor.submit(() -> service.reserve(userId, "w-big")));
             }
         }
         var elapsed = Duration.ofNanos(System.nanoTime() - start);

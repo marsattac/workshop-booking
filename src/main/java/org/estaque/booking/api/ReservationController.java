@@ -61,6 +61,8 @@ public class ReservationController {
                     HttpStatus.NOT_FOUND, "Atelier introuvable : " + workshopId);
             case FULL -> ProblemDetail.forStatusAndDetail(
                     HttpStatus.CONFLICT, "Atelier complet : " + workshopId);
+            case ALREADY_RESERVED -> ProblemDetail.forStatusAndDetail(
+                    HttpStatus.CONFLICT, "Atelier déjà réservé par l'utilisateur " + userId + " : " + workshopId);
         };
         problem.setProperty("code", reason.name());
         return problem;

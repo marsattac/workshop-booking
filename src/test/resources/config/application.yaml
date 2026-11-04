@@ -1,4 +1,0 @@
-# Surcharge la config de src/main pour les tests : pas de latence simulée.
-# Les tests qui en ont besoin fixent la leur (voir ReservationServiceTest).
-booking:
-  db-latency: 0ms

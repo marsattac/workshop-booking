@@ -12,6 +12,7 @@ import org.estaque.booking.service.result.Reason;
 import org.estaque.booking.service.result.Rejected;
 import org.estaque.booking.service.result.ReservationResult;
 
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 
 import java.util.Optional;
@@ -51,7 +52,13 @@ public class ReservationService {
             return new Rejected(Reason.FULL);
         }
 
-        var reservation = reservations.insert(userId, workshopId);
+        Reservation reservation;
+        try {
+            reservation = reservations.insert(userId, workshopId);
+        } catch (DuplicateKeyException e) {
+            // Contrainte d'unicité (user_id, workshop_id) : l'utilisateur a déjà réservé cet atelier.
+            return new Rejected(Reason.ALREADY_RESERVED);
+        }
         events.created(reservation);
         return new Confirmed(reservation);
     }

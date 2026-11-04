@@ -11,6 +11,3 @@ spring:
   threads:
     virtual:
       enabled: true
-
-booking:
-  db-latency: 200ms
