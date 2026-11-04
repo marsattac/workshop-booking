@@ -1,0 +1,4 @@
+spring:
+  flyway:
+    # Ajoute les données de démo au schéma.
+    locations: classpath:db/migration,classpath:db/demo

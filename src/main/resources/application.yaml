@@ -1,6 +1,10 @@
 spring:
   application:
     name: workshop-booking
+  flyway:
+    # *:future est la valeur par défaut. repeatable:missing permet de démarrer sans le profil dev
+    # sur une base où les données de démo (migration répétable de db/demo) ont déjà été chargées.
+    ignore-migration-patterns: '*:future,repeatable:missing'
   mvc:
     problemdetails:
       enabled: true
