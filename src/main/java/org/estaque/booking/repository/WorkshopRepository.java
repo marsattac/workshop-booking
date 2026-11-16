@@ -43,15 +43,31 @@ public class WorkshopRepository {
      * and then decrementing would let both through.
      * The schema's CHECK (seats_left BETWEEN 0 AND capacity) constraint remains the last line of defense.
      *
-     * @return {@code true} if a seat was taken, {@code false} if the workshop is full or does not exist
+     * <p>When no row is updated, a second query tells a full workshop from a missing one: the workshop
+     * may have been deleted since it was read. That query runs after the {@code UPDATE}, which waits
+     * for any concurrent deletion of the row to end, so it sees that deletion once committed.
+     *
+     * @return {@link SeatTaking#TAKEN} if a seat was taken, {@link SeatTaking#FULL} if the workshop
+     *         has no seat left, {@link SeatTaking#WORKSHOP_NOT_FOUND} if it does not exist
      */
-    public boolean takeSeat(String id) {
-        return jdbc.sql("""
+    public SeatTaking takeSeat(String id) {
+        var updated = jdbc.sql("""
                         UPDATE workshops SET seats_left = seats_left - 1
                         WHERE id = :id AND seats_left > 0
                         """)
                 .param("id", id)
-                .update() == 1;
+                .update();
+        if (updated == 1) {
+            return SeatTaking.TAKEN;
+        }
+        return exists(id) ? SeatTaking.FULL : SeatTaking.WORKSHOP_NOT_FOUND;
+    }
+
+    private boolean exists(String id) {
+        return jdbc.sql("SELECT EXISTS (SELECT 1 FROM workshops WHERE id = :id)")
+                .param("id", id)
+                .query(Boolean.class)
+                .single();
     }
 
     public Optional<Workshop> findById(String id) throws InterruptedException {

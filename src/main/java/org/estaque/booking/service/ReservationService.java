@@ -14,6 +14,7 @@ import org.estaque.booking.service.result.ReservationResult;
 
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.TransactionStatus;
 import org.springframework.transaction.support.TransactionOperations;
 
 import java.util.Optional;
@@ -69,19 +70,23 @@ public class ReservationService {
      * it holds a connection for its whole duration, while each read borrows another one from the pool.
      */
     private ReservationResult book(String userId, String workshopId) {
-        return transactions.execute(status -> {
-            if (!workshops.takeSeat(workshopId)) {
-                return new Rejected(Reason.FULL);
-            }
-            try {
-                return new Confirmed(reservations.insert(userId, workshopId));
-            } catch (DuplicateKeyException e) {
-                // Unique constraint (user_id, workshop_id): the user has already booked this workshop.
-                // Give back the seat taken just before.
-                status.setRollbackOnly();
-                return new Rejected(Reason.ALREADY_RESERVED);
-            }
+        return transactions.execute(status -> switch (workshops.takeSeat(workshopId)) {
+            case TAKEN -> insert(userId, workshopId, status);
+            case FULL -> new Rejected(Reason.FULL);
+            // Deleted between load() and takeSeat(): the workshop is missing, not full.
+            case WORKSHOP_NOT_FOUND -> new Rejected(Reason.WORKSHOP_NOT_FOUND);
         });
+    }
+
+    private ReservationResult insert(String userId, String workshopId, TransactionStatus status) {
+        try {
+            return new Confirmed(reservations.insert(userId, workshopId));
+        } catch (DuplicateKeyException e) {
+            // Unique constraint (user_id, workshop_id): the user has already booked this workshop.
+            // Give back the seat taken just before.
+            status.setRollbackOnly();
+            return new Rejected(Reason.ALREADY_RESERVED);
+        }
     }
 
     /** Reservation {@code reservationId}, if it exists and belongs to workshop {@code workshopId}. */

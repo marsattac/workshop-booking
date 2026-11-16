@@ -125,6 +125,25 @@ class ReservationServiceTest {
     }
 
     @Test
+    @DisplayName("atelier supprimé entre la lecture et la prise de place : WORKSHOP_NOT_FOUND, pas FULL")
+    void rejectsWorkshopDeletedAfterLoad() throws InterruptedException {
+        // Deletes the workshop right after reading it, before the service takes a seat.
+        var deletingWorkshops = new WorkshopRepository(jdbc, Latency.NONE) {
+            @Override
+            public Optional<Workshop> findById(String id) throws InterruptedException {
+                var workshop = super.findById(id);
+                jdbc.sql("DELETE FROM workshops WHERE id = :id").param("id", id).update();
+                return workshop;
+            }
+        };
+        var racingService = new ReservationService(users, deletingWorkshops, reservations, published::add, transactions);
+
+        assertRejected(Reason.WORKSHOP_NOT_FOUND, racingService.reserve("u1", "w1"));
+        assertEquals(List.of(), reservations.findAll());
+        assertEquals(List.of(), published);
+    }
+
+    @Test
     @DisplayName("atelier déjà réservé par l'utilisateur : ALREADY_RESERVED, sans nouvel événement")
     void rejectsDuplicateReservation() throws InterruptedException {
         var first = assertInstanceOf(Confirmed.class, service.reserve("u1", "w1"));
