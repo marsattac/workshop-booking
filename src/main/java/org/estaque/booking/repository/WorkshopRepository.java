@@ -22,11 +22,14 @@ public class WorkshopRepository {
     /** Creates the workshop, or replaces it if it already exists. */
     public void save(Workshop workshop) {
         jdbc.sql("""
-                        INSERT INTO workshops (id, title, seats_left) VALUES (:id, :title, :seatsLeft)
-                        ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, seats_left = EXCLUDED.seats_left
+                        INSERT INTO workshops (id, title, capacity, seats_left)
+                        VALUES (:id, :title, :capacity, :seatsLeft)
+                        ON CONFLICT (id) DO UPDATE
+                        SET title = EXCLUDED.title, capacity = EXCLUDED.capacity, seats_left = EXCLUDED.seats_left
                         """)
                 .param("id", workshop.id())
                 .param("title", workshop.title())
+                .param("capacity", workshop.capacity())
                 .param("seatsLeft", workshop.seatsLeft())
                 .update();
     }
@@ -38,7 +41,7 @@ public class WorkshopRepository {
      * PostgreSQL evaluates {@code seats_left > 0} while it holds the row lock, so two concurrent
      * reservations cannot both take the last seat. Checking {@link Workshop#seatsLeft()} in Java
      * and then decrementing would let both through.
-     * The schema's CHECK (seats_left >= 0) constraint remains the last line of defense.
+     * The schema's CHECK (seats_left BETWEEN 0 AND capacity) constraint remains the last line of defense.
      *
      * @return {@code true} if a seat was taken, {@code false} if the workshop is full or does not exist
      */
@@ -54,7 +57,7 @@ public class WorkshopRepository {
     public Optional<Workshop> findById(String id) throws InterruptedException {
         RequestContext.log("findById " + id);
         latency.simulate();
-        return jdbc.sql("SELECT id, title, seats_left FROM workshops WHERE id = :id")
+        return jdbc.sql("SELECT id, title, capacity, seats_left FROM workshops WHERE id = :id")
                 .param("id", id)
                 .query(Workshop.class)
                 .optional();

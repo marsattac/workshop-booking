@@ -28,7 +28,7 @@ class DatabaseSchemaTest {
     @BeforeEach
     void setUp() {
         jdbc.sql("INSERT INTO users (id, name) VALUES ('u1', 'Alice')").update();
-        jdbc.sql("INSERT INTO workshops (id, title, seats_left) VALUES ('w1', 'Java 25', 1)").update();
+        jdbc.sql("INSERT INTO workshops (id, title, capacity, seats_left) VALUES ('w1', 'Java 25', 1, 1)").update();
     }
 
     @Test
@@ -55,7 +55,24 @@ class DatabaseSchemaTest {
         var update = jdbc.sql("UPDATE workshops SET seats_left = seats_left - 2 WHERE id = 'w1'");
 
         var error = assertThrows(DataIntegrityViolationException.class, update::update);
-        assertTrue(error.getMessage().contains("workshops_seats_left_not_negative"));
+        assertTrue(error.getMessage().contains("workshops_seats_left_within_capacity"));
+    }
+
+    @Test
+    @DisplayName("seats_left ne peut pas dépasser la capacité")
+    void rejectsSeatsLeftAboveCapacity() {
+        var update = jdbc.sql("UPDATE workshops SET seats_left = capacity + 1 WHERE id = 'w1'");
+
+        var error = assertThrows(DataIntegrityViolationException.class, update::update);
+        assertTrue(error.getMessage().contains("workshops_seats_left_within_capacity"));
+    }
+
+    @Test
+    @DisplayName("la capacité est obligatoire")
+    void requiresCapacity() {
+        var insert = jdbc.sql("INSERT INTO workshops (id, title, seats_left) VALUES ('w2', 'Sans capacité', 1)");
+
+        assertThrows(DataIntegrityViolationException.class, insert::update);
     }
 
     @Test

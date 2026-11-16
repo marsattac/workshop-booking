@@ -8,10 +8,11 @@ INSERT INTO users (id, name) VALUES
     ('u4', 'David')
 ON CONFLICT (id) DO NOTHING;
 
-INSERT INTO workshops (id, title, seats_left) VALUES
-    ('w1', 'Java 25 : virtual threads et structured concurrency', 20),
-    ('w2', 'Spring Boot 4 en pratique', 2),
-    ('w3', 'PostgreSQL pour les développeurs', 0)
+-- seats_left = capacity minus the reservations below.
+INSERT INTO workshops (id, title, capacity, seats_left) VALUES
+    ('w1', 'Java 25 : virtual threads et structured concurrency', 20, 20),
+    ('w2', 'Spring Boot 4 en pratique', 3, 2),
+    ('w3', 'PostgreSQL pour les développeurs', 1, 0)
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO reservations (user_id, workshop_id) VALUES
