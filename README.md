@@ -65,7 +65,9 @@ Three ways to stop two reservations from taking the same last seat, each on its 
 | Pessimistic lock | `feature/pessimistic-lock` | `SELECT seats_left ... FOR UPDATE`, check in Java, then `UPDATE` under the lock | Java, under the row lock |
 | Optimistic lock | `feature/optimistic-lock` | Read `seats_left` and `version`, check in Java, then `UPDATE ... WHERE id = :id AND version = :read`; no row updated means retry | Java, guarded by the version |
 
-In every case, taking the seat and inserting the reservation run in one transaction, and the schema's `CHECK (seats_left >= 0)` stays as the last line of defense.
+In every case, taking the seat and inserting the reservation run in one transaction, and a `CHECK` constraint of the schema stays as the last line of defense: `CHECK (seats_left BETWEEN 0 AND capacity)` on `feature/postgres-setup`, `CHECK (seats_left >= 0)` on the two other branches.
+
+The `capacity` column (migration `V4__add_workshop_capacity.sql`) was added to `feature/postgres-setup` after the benchmark. It does not change how a seat is taken, so the measures below still apply. The two other branches do not have it, and `feature/optimistic-lock` already uses `V4` for its `version` column: merging them would require renumbering one of the two migrations.
 
 Measured with `ReservationServiceTest#handlesThousandConcurrentReservations`: 1000 users book a 100-seat workshop at the same time, on virtual threads. Each run gave 100 confirmed reservations, 900 rejected as full and 0 seats left. The times include the 200 ms simulated latency of the parallel reads of the user and the workshop, which is the same for all three. 5 runs per strategy, interleaved, on a local PostgreSQL 18 (Testcontainers on OrbStack) with the default pool of 10 connections:
 
