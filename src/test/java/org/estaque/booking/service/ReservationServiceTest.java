@@ -155,37 +155,8 @@ class ReservationServiceTest {
     }
 
     @Test
-    @DisplayName("utilisateur et atelier sont chargés en parallèle")
-    void loadsUserAndWorkshopInParallel() throws InterruptedException {
-        long start = System.nanoTime();
-        service.reserve("u1", "w1");
-        var elapsed = Duration.ofNanos(System.nanoTime() - start);
-
-        // Sequentially it would take at least 2 x 200 ms (read the user, then the workshop).
-        assertTrue(elapsed.compareTo(DB_LATENCY.multipliedBy(2)) < 0,
-                () -> "chargement non parallèle : " + elapsed.toMillis() + " ms");
-    }
-
-    @Test
-    @DisplayName("les lectures s'exécutent sur des virtual threads")
-    void loadsOnVirtualThreads() throws InterruptedException {
-        var threads = new CopyOnWriteArrayList<Thread>();
-        Latency recordThread = () -> threads.add(Thread.currentThread());
-        var spiedUsers = new UserRepository(jdbc, recordThread);
-        var spiedWorkshops = new WorkshopRepository(jdbc, recordThread);
-        spiedUsers.save(new User("u1", "Alice"));
-        spiedWorkshops.save(new Workshop("w1", "Java 25", 3));
-
-        new ReservationService(spiedUsers, spiedWorkshops, reservations, published::add, transactions).reserve("u1", "w1");
-
-        assertEquals(2, threads.size());
-        assertTrue(threads.stream().allMatch(Thread::isVirtual));
-        assertNotEquals(threads.get(0), threads.get(1));
-    }
-
-    @Test
     @DisplayName("le REQUEST_ID lié par l'appelant est propagé aux deux lectures")
-    void propagatesRequestIdToParallelReads() throws InterruptedException {
+    void propagatesRequestIdToReads() throws InterruptedException {
         var requestIds = new CopyOnWriteArrayList<String>();
         Latency recordRequestId = () -> requestIds.add(RequestContext.REQUEST_ID.get());
         var spiedUsers = new UserRepository(jdbc, recordRequestId);
@@ -235,9 +206,9 @@ class ReservationServiceTest {
         assertEquals(seats, reservations.findAll().size());
         assertEquals(seats, published.size());
         assertEquals(0, seatsLeft("w-big"));
-        // Reservations overlap: sequentially, the reads alone would take 1000 x DB_LATENCY.
+        // Reservations overlap: one after the other, the reads alone would take 1000 x 2 x DB_LATENCY.
         // Writes, however, go through one at a time: the conditional update locks the workshop row
-        // until each transaction ends. Hence a generous limit (about 1 s measured locally).
+        // until each transaction ends. Hence a generous limit (about 650 ms measured locally).
         var limit = DB_LATENCY.multipliedBy(10);
         assertTrue(elapsed.compareTo(limit) < 0,
                 () -> "trop lent : " + elapsed.toMillis() + " ms (limite : " + limit.toMillis() + " ms)");

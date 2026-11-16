@@ -45,7 +45,7 @@ class RequestIdPropagationTest {
     private Latency latency;
 
     @Test
-    @DisplayName("X-Request-Id atteint les deux lectures parallèles")
+    @DisplayName("X-Request-Id atteint les deux lectures")
     void propagatesRequestIdToRepositories() throws Exception {
         var seenByRepositories = new CopyOnWriteArrayList<String>();
         willAnswer(_ -> seenByRepositories.add(RequestContext.REQUEST_ID.get())).given(latency).simulate();

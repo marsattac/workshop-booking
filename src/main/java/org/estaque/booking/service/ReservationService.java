@@ -2,8 +2,6 @@ package org.estaque.booking.service;
 
 import org.estaque.booking.event.ReservationEvents;
 import org.estaque.booking.model.Reservation;
-import org.estaque.booking.model.User;
-import org.estaque.booking.model.Workshop;
 import org.estaque.booking.repository.ReservationRepository;
 import org.estaque.booking.repository.UserRepository;
 import org.estaque.booking.repository.WorkshopRepository;
@@ -18,7 +16,6 @@ import org.springframework.transaction.TransactionStatus;
 import org.springframework.transaction.support.TransactionOperations;
 
 import java.util.Optional;
-import java.util.concurrent.StructuredTaskScope;
 
 @Service
 public class ReservationService {
@@ -28,8 +25,6 @@ public class ReservationService {
     private final ReservationRepository reservations;
     private final ReservationEvents events;
     private final TransactionOperations transactions;
-
-    private record Loaded(Optional<User> user, Optional<Workshop> workshop) {}
 
     public ReservationService(UserRepository users,
                               WorkshopRepository workshops,
@@ -44,12 +39,10 @@ public class ReservationService {
     }
 
     public ReservationResult reserve(String userId, String workshopId) throws InterruptedException {
-        var loaded = load(userId, workshopId);
-
-        if (loaded.user().isEmpty()) {
+        if (users.findById(userId).isEmpty()) {
             return new Rejected(Reason.USER_NOT_FOUND);
         }
-        if (loaded.workshop().isEmpty()) {
+        if (workshops.findById(workshopId).isEmpty()) {
             return new Rejected(Reason.WORKSHOP_NOT_FOUND);
         }
         // No check on seatsLeft here: the value read may already be stale. The "a seat is left"
@@ -66,14 +59,14 @@ public class ReservationService {
     /**
      * Takes the seat, then saves the reservation, in a single transaction: one never happens without the other.
      *
-     * <p>The transaction only covers these two writes, not the parallel reads of {@link #load}:
-     * it holds a connection for its whole duration, while each read borrows another one from the pool.
+     * <p>The transaction only covers these two writes, not the reads that come before them:
+     * it holds a connection and the workshop row lock for its whole duration, so it is kept short.
      */
     private ReservationResult book(String userId, String workshopId) {
         return transactions.execute(status -> switch (workshops.takeSeat(workshopId)) {
             case TAKEN -> insert(userId, workshopId, status);
             case FULL -> new Rejected(Reason.FULL);
-            // Deleted between load() and takeSeat(): the workshop is missing, not full.
+            // Deleted between its read and takeSeat(): the workshop is missing, not full.
             case WORKSHOP_NOT_FOUND -> new Rejected(Reason.WORKSHOP_NOT_FOUND);
         });
     }
@@ -93,23 +86,5 @@ public class ReservationService {
     public Optional<Reservation> find(String workshopId, String reservationId) {
         return reservations.findById(reservationId)
                 .filter(reservation -> reservation.workshopId().equals(workshopId));
-    }
-
-    private Loaded load(String userId, String workshopId) throws InterruptedException {
-        // Both reads run in parallel, each on its own virtual thread;
-        // join() waits for both and, if one fails, cancels the other.
-        try (var scope = StructuredTaskScope.open()) {
-            var user = scope.fork(() -> users.findById(userId));
-            var workshop = scope.fork(() -> workshops.findById(workshopId));
-            scope.join();
-            return new Loaded(user.get(), workshop.get());
-        } catch (StructuredTaskScope.FailedException e) {
-            switch (e.getCause()) {
-                case RuntimeException re -> throw re;
-                case Error err -> throw err;
-                case InterruptedException ie -> throw ie;
-                case Throwable t -> throw new IllegalStateException(t);
-            }
-        }
     }
 }

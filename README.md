@@ -83,3 +83,8 @@ Reading the results:
 - **Optimistic lock** sits in between. Requests that read 0 seats are rejected without locking anything. Retries stay low (about 130 for 1000 requests): in PostgreSQL, an `UPDATE` on a row being modified still waits for the other transaction, then finds that the version changed. Conflicts therefore only happen while seats are left.
 
 This benchmark measures the worst case: 1000 requests on a single workshop row is the scenario least favorable to the pessimistic lock, since every transaction waits for the same lock. With reservations spread across many workshops, each lock would only be contended by the requests for its own workshop, and the gap between the three strategies would likely shrink.
+
+### Removing parallelisation
+
+We chose not to retrieve parallelly the user and the workshop during a booking process anymore.
+Reading user and workshop in the database is extremely fast and does not bring significant improvement while parallelisation has a strong effect on the database connection pool.
