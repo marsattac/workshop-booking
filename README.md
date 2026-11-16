@@ -81,3 +81,5 @@ Reading the results:
 - **Conditional update** is the fastest: one statement both checks and takes the seat. Once the workshop is full, the remaining requests update no row and do not wait for anything.
 - **Pessimistic lock** is the slowest: all 1000 transactions queue on the workshop row, including the 900 that only find out it is full. The lock is held while the seats are read and updated, and while the reservation is inserted.
 - **Optimistic lock** sits in between. Requests that read 0 seats are rejected without locking anything. Retries stay low (about 130 for 1000 requests): in PostgreSQL, an `UPDATE` on a row being modified still waits for the other transaction, then finds that the version changed. Conflicts therefore only happen while seats are left.
+
+This benchmark measures the worst case: 1000 requests on a single workshop row is the scenario least favorable to the pessimistic lock, since every transaction waits for the same lock. With reservations spread across many workshops, each lock would only be contended by the requests for its own workshop, and the gap between the three strategies would likely shrink.
