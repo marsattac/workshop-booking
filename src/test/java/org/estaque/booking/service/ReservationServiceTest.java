@@ -14,6 +14,7 @@ import org.estaque.booking.service.result.Reason;
 import org.estaque.booking.service.result.Rejected;
 import org.estaque.booking.service.result.ReservationResult;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -63,7 +64,7 @@ class ReservationServiceTest {
 
     @BeforeEach
     void setUp() {
-        jdbc.sql("TRUNCATE reservations, workshops, users").update();
+        truncateTables();
 
         transactions = new TransactionTemplate(transactionManager);
         var latency = Latency.of(DB_LATENCY);
@@ -75,6 +76,13 @@ class ReservationServiceTest {
         users.save(new User("u1", "Alice"));
         workshops.save(new Workshop("w1", "Java 25", 3));
         workshops.save(new Workshop("w-full", "Complet", 0));
+    }
+
+    // Without a test transaction nothing is rolled back: empty the tables so that other test classes
+    // sharing this database (same Spring context, same container) start from a clean state.
+    @AfterEach
+    void tearDown() {
+        truncateTables();
     }
 
     @Test
@@ -253,6 +261,10 @@ class ReservationServiceTest {
 
         assertTrue(service.find("w1", "unknown").isEmpty());
         assertTrue(service.find("w2", confirmed.reservation().id()).isEmpty());
+    }
+
+    private void truncateTables() {
+        jdbc.sql("TRUNCATE reservations, workshops, users").update();
     }
 
     private int seatsLeft(String workshopId) {
